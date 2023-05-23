@@ -6,23 +6,35 @@ using System;
 using System.Runtime.Caching;
 using bidService.Models;
 using Newtonsoft.Json;
+using MongoDB.Driver;
 namespace bidService;
 
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
 
+
+
+
+
+    
+
+
+
+
+
+    private readonly IMongoDatabase _database;
+
     private ConnectionFactory factory = new ConnectionFactory();
     private IConnection connection;
     private IModel channel;
-
-  
-
     //Navne på kørere message kan bliver sendt til
     private string[] _routeWays = new string[0];
 
    
     
+    private string auctionBidCol;
+   
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
@@ -37,13 +49,9 @@ public class Worker : BackgroundService
         _routeWays = routeWaysArray.Length > 0 ? routeWaysArray.Split(",") : new string[0];
         string connectionString = configuration["RabbitMQConnectionString"] ?? string.Empty;
 
-    
-
         factory = new ConnectionFactory() { HostName = "localhost" };
         connection = factory.CreateConnection();
         channel = connection.CreateModel();
-
-            
 
         //Logger en besked for at fortælle, hvad kører der er lavet.
         string rWays = string.Empty;
@@ -53,7 +61,10 @@ public class Worker : BackgroundService
         }
          _logger.LogInformation($"RouteWays: {rWays}");
 
-        _logger = logger;
+
+        var client = new MongoClient($"mongodb://{configuration["server"] ?? string.Empty}:{configuration["port"] ?? string.Empty}/");
+        _database = client.GetDatabase(configuration["database"] ?? string.Empty);
+        auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -85,35 +96,12 @@ public class Worker : BackgroundService
 
         // Gemmer routing key'en fra beskeden
         var routingKey = ea.RoutingKey;
+        
+      var auctionCollection = _database.GetCollection<AuctionBid>(auctionBidCol);
 
-        // Logger beskeden og dens routing key
-        _logger.LogInformation($"[x] Modtaget '{routingKey}':'{message}' ");
-        _logger.LogInformation("All items length: hello1");
-        AuctionBid auctionBid = JsonConvert.DeserializeObject<AuctionBid>(message);
-        _logger.LogInformation("All items length: hello2");
-        CacheItem item = new CacheItem(auctionBid.AuctionBidID.ToString(),auctionBid);
-        _logger.LogInformation("All items length: hello3");
-        CustomMemoryCache.CustomMemoryCach.MemoryCache.Add(item,new CacheItemPolicy());
-
-   
-        _logger.LogInformation("All items length: hello4" + (CustomMemoryCache.CustomMemoryCach == null));
-       IEnumerable<string> keys = CustomMemoryCache.CustomMemoryCach.MemoryCache.Select(item => item.Key);
-        _logger.LogInformation("All items length: hello5");
-AuctionBid[] allItems = keys
-    .Where(key => key == "1")
-    .Select(key => (AuctionBid)CustomMemoryCache.CustomMemoryCach.MemoryCache.Get(key))
-    .ToArray();
-
-
-
-    _logger.LogInformation("All items length: " +allItems.Length.ToString());
-
-        for (int i = 0; i < allItems.Length; i++)
-        {
-            
-            _logger.LogInformation("bid value: " + allItems[i].Bid);
-            //Send with RabbitMQ..
-        }
+      AuctionBid auctionBid = JsonConvert.DeserializeObject<AuctionBid>(message);
+      auctionCollection.InsertOne(auctionBid);
+  
     };
 
     // Begynder at forbruge beskeder fra køen
