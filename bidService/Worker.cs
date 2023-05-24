@@ -28,10 +28,7 @@ public class Worker : BackgroundService
     private ConnectionFactory factory = new ConnectionFactory();
     private IConnection connection;
     private IModel channel;
-    //Navne på kørere message kan bliver sendt til
-    private string[] _routeWays = new string[0];
 
-   
     
     private string auctionBidCol;
    
@@ -42,11 +39,7 @@ public class Worker : BackgroundService
         //this.memoryCache = memoryCache;
         _logger = logger;
         
-        //Hvilken køer der laves.
-        string routeWaysArray = configuration["routeWaysArray"] ?? string.Empty;
-        routeWaysArray = "sovs";
-        //Sætter kørerne i en array der kan køres af et for loop
-        _routeWays = routeWaysArray.Length > 0 ? routeWaysArray.Split(",") : new string[0];
+
         string connectionString = configuration["RabbitMQConnectionString"] ?? string.Empty;
 
         factory = new ConnectionFactory() { HostName = "localhost" };
@@ -54,12 +47,6 @@ public class Worker : BackgroundService
         channel = connection.CreateModel();
 
         //Logger en besked for at fortælle, hvad kører der er lavet.
-        string rWays = string.Empty;
-        for (int i = 0; i < _routeWays.Length; i++)
-        {
-            rWays += _routeWays[i] + ", ";
-        }
-         _logger.LogInformation($"RouteWays: {rWays}");
 
 
         var client = new MongoClient($"mongodb://{configuration["server"] ?? string.Empty}:{configuration["port"] ?? string.Empty}/");
@@ -69,39 +56,35 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        
+       
         // Deklarer et kønavn og få navnet fra RabbitMQ-serveren
     var queueName = channel.QueueDeclare().QueueName;
 
-    // Gennemløber listen af routing keys og binder køen til exchange
-    foreach (var bindingKey in _routeWays)
-    {
+
+
+ 
         channel.QueueBind(queue: queueName,
                           exchange: "topic_logs",
-                          routingKey: bindingKey);
-    }
-
-    // Logger antallet af routing keys
-    _logger.LogInformation(_routeWays.Length.ToString());
-
+                          routingKey: "auction");
     // Opretter en forbruger, som lytter til beskeder på køen
     var consumer = new EventingBasicConsumer(channel);
 
     // Når forbrugeren modtager en besked, vil denne handling blive udført
     consumer.Received += (model, ea) =>
     {
+
         // Konverterer beskedens krop fra bytes til en UTF-8-streng
         var body = ea.Body.ToArray();
         var message = Encoding.UTF8.GetString(body);
-
+        _logger.LogInformation(message);
         // Gemmer routing key'en fra beskeden
         var routingKey = ea.RoutingKey;
         
-      var auctionCollection = _database.GetCollection<AuctionBid>(auctionBidCol);
+      var auctionCollection = _database.GetCollection<Bid>(auctionBidCol);
 
-      AuctionBid auctionBid = JsonConvert.DeserializeObject<AuctionBid>(message);
-      auctionCollection.InsertOne(auctionBid);
-  
+      Bid bid = JsonConvert.DeserializeObject<Bid>(message);
+      auctionCollection.InsertOne(bid);
+    
     };
 
     // Begynder at forbruge beskeder fra køen
