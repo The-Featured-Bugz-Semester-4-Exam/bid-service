@@ -12,34 +12,18 @@ namespace bidService;
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-
-
-
-
-
-    
-
-
-
-
-
     private readonly IMongoDatabase _database;
-
     private ConnectionFactory factory = new ConnectionFactory();
     private IConnection connection;
     private IModel channel;
-
-    
     private string auctionBidCol;
    
-
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
 
         //this.memoryCache = memoryCache;
         _logger = logger;
         
-
         string connectionString = configuration["RabbitMQConnectionString"] ?? string.Empty;
 
         factory = new ConnectionFactory() { HostName = "localhost" };
@@ -47,8 +31,6 @@ public class Worker : BackgroundService
         channel = connection.CreateModel();
 
         //Logger en besked for at fortælle, hvad kører der er lavet.
-
-
         var client = new MongoClient($"mongodb://{configuration["server"] ?? string.Empty}:{configuration["port"] ?? string.Empty}/");
         _database = client.GetDatabase(configuration["database"] ?? string.Empty);
         auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
@@ -59,9 +41,6 @@ public class Worker : BackgroundService
        
         // Deklarer et kønavn og få navnet fra RabbitMQ-serveren
     var queueName = channel.QueueDeclare().QueueName;
-
-
-
  
         channel.QueueBind(queue: queueName,
                           exchange: "topic_logs",
@@ -72,7 +51,6 @@ public class Worker : BackgroundService
     // Når forbrugeren modtager en besked, vil denne handling blive udført
     consumer.Received += (model, ea) =>
     {
-
         // Konverterer beskedens krop fra bytes til en UTF-8-streng
         var body = ea.Body.ToArray();
         var message = Encoding.UTF8.GetString(body);

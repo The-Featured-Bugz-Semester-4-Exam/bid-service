@@ -22,6 +22,6 @@
     <PackageReference Include="System.Runtime.Caching" Version="7.0.0" />
     <None Include="NLog.config">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-</None>
+    </None>
   </ItemGroup>
 </Project>
