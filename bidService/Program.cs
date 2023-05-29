@@ -22,13 +22,13 @@ using System.Linq;
 
 
 var logger = NLog.LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
+logger.Debug("BidService-Worker");
 
-
+try {
 IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
         services.AddMemoryCache();
-
         services.AddHostedService<Worker>();
         services.AddControllers();
     })
@@ -45,11 +45,21 @@ IHost host = Host.CreateDefaultBuilder(args)
             });
         });
         webBuilder.UseUrls("http://localhost:5034");
-    }) .ConfigureLogging((hostContext, logging) =>
+   })/* .ConfigureLogging((hostContext, logging) =>
     {
         logging.ClearProviders();
-    })
+    })*/
     .UseNLog()
     .Build();
 
 host.Run();
+}
+catch (Exception ex)
+{
+logger.Error(ex, "Stopped program because of exception");
+throw;
+}
+finally
+{
+NLog.LogManager.Shutdown();
+}
