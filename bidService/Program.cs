@@ -23,42 +23,43 @@ using System.Linq;
 var logger = NLog.LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
 logger.Debug("BidService-Worker");
 
-try {
-IHost host = Host.CreateDefaultBuilder(args)
-    .ConfigureServices(services =>
-    {
-        services.AddMemoryCache();
-        services.AddHostedService<Worker>();
-        services.AddControllers();
-    })
-    .ConfigureWebHostDefaults(webBuilder =>
-    {
-        webBuilder.Configure(app =>
+try
+{
+    IHost host = Host.CreateDefaultBuilder(args)
+        .ConfigureServices(services =>
         {
-            // Add MVC middleware
-            app.UseRouting();
-            app.UseEndpoints(endpoints =>
+            services.AddMemoryCache();
+            services.AddHostedService<Worker>();
+            //services.AddControllers();
+        })
+        /*.ConfigureWebHostDefaults(webBuilder =>
+        {
+            webBuilder.Configure(app =>
             {
-                // Map your MVC routes
-                endpoints.MapControllers();
+                // Add MVC middleware
+                app.UseRouting();
+                app.UseEndpoints(endpoints =>
+                {
+                    // Map your MVC routes
+                    endpoints.MapControllers();
+                });
             });
-        });
-        webBuilder.UseUrls("http://localhost:5034");
-   })/* .ConfigureLogging((hostContext, logging) =>
-    {
-        logging.ClearProviders();
-    })*/
-    .UseNLog()
-    .Build();
+            webBuilder.UseUrls("http://localhost:5034");
+       }) .ConfigureLogging((hostContext, logging) =>
+        {
+            logging.ClearProviders();
+        })*/
+        .UseNLog()
+        .Build();
 
-host.Run();
+    host.Run();
 }
 catch (Exception ex)
 {
-logger.Error(ex, "Stopped program because of exception");
-throw;
+    logger.Error(ex, "Stopped program because of exception");
+    throw;
 }
 finally
 {
-NLog.LogManager.Shutdown();
+    NLog.LogManager.Shutdown();
 }

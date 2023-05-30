@@ -23,15 +23,16 @@ public class Worker : BackgroundService
 
         //this.memoryCache = memoryCache;
         _logger = logger;
-        
-        string connectionString = configuration["RabbitMQConnectionString"] ?? string.Empty;
 
-        factory = new ConnectionFactory() { HostName = "localhost" };
+        string connectionString = configuration["rabbitmqUrl"] ?? "localhost";
+        _logger.LogInformation("Connecter til rabbitmq: " + connectionString + ":" + configuration["rabbitmqPort"]);        
+
+        factory = new ConnectionFactory() { HostName = connectionString, Port= Convert.ToInt16(configuration["rabbitmqPort"]) };
         connection = factory.CreateConnection();
         channel = connection.CreateModel();
 
         //Logger en besked for at fortælle, hvad kører der er lavet.
-        var client = new MongoClient($"mongodb://{configuration["server"] ?? string.Empty}:{configuration["port"] ?? string.Empty}/");
+        var client = new MongoClient($"{configuration["connectMongodb"]}");
         _database = client.GetDatabase(configuration["database"] ?? string.Empty);
         auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
     }
@@ -75,7 +76,7 @@ public class Worker : BackgroundService
     {
        
         
-        _logger.LogInformation("Arbejder ved: {time}", DateTimeOffset.Now);
+        _logger.LogInformation("Arbejder tid: {time}", DateTimeOffset.Now);
         await Task.Delay(10000, stoppingToken);
     }
     }
