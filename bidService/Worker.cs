@@ -21,22 +21,44 @@ public class Worker : BackgroundService
     {
         _logger = logger;
 
-
         // Get the RabbitMQ connection information from the configuration
         string connectionString = configuration["rabbitmqUrl"] ?? "localhost";
-        _logger.LogInformation("Connecter to rabbitmq: " + connectionString + ":" + configuration["rabbitmqPort"]);
+
+        try
+        {
+            _logger.LogInformation("INFO: Connecter to rabbitmq: " + connectionString + ":" + configuration["rabbitmqPort"]);
 
 
-        // Create RabbitMQ connection factory and connection
-        factory = new ConnectionFactory() { HostName = connectionString, Port = Convert.ToInt16(configuration["rabbitmqPort"]) };
-        connection = factory.CreateConnection();
-        channel = connection.CreateModel();
+            // Create RabbitMQ connection factory and connection
+            factory = new ConnectionFactory() { 
+                HostName = connectionString ?? "localhost",
+                Port = Convert.ToInt16(configuration["rabbitmqPort"] ?? "5672"),
+                UserName = configuration["rabbitmqUsername"] ?? "guest",
+                Password = configuration["rabbitmqUserpassword"] ?? "guest"
 
+            };
+            connection = factory.CreateConnection();
+            channel = connection.CreateModel();     
+        }
+        catch (System.Exception ex)
+        {
+            _logger.LogError(ex,"FAILED: Connecter to rabbitmq going wrong: " + connectionString + ":" + configuration["rabbitmqPort"]);
+            throw;
+        }
 
-        // Create MongoDB database connection using configuration
-        var client = new MongoClient($"{configuration["connectMongodb"]}");
-        _database = client.GetDatabase(configuration["database"] ?? string.Empty);
-        auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
+        try
+        {
+            _logger.LogInformation($"Connecting to connectMongodb: {configuration["connectMongodb"]}");
+            // Create MongoDB database connection using configuration
+            var client = new MongoClient($"{configuration["connectMongodb"]}");
+            _database = client.GetDatabase(configuration["database"] ?? string.Empty);
+            auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
+        }
+        catch (System.Exception ex)
+        {
+             _logger.LogError(ex,$"FAILED: Connecting to connectMongodb going wrong: {configuration["connectMongodb"]}");
+            throw;
+        }
     }
 
   
