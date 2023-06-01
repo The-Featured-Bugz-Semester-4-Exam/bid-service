@@ -1,14 +1,12 @@
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
-using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Runtime.Caching;
 using bidService.Models;
 using Newtonsoft.Json;
 using MongoDB.Driver;
 namespace bidService;
 
+// Define the Worker class that inherits from BackgroundService
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
@@ -17,67 +15,73 @@ public class Worker : BackgroundService
     private IConnection connection;
     private IModel channel;
     private string auctionBidCol;
-   
+
+  
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
-
-        //this.memoryCache = memoryCache;
         _logger = logger;
 
-        string connectionString = configuration["rabbitmqUrl"] ?? "localhost";
-        _logger.LogInformation("Connecter til rabbitmq: " + connectionString + ":" + configuration["rabbitmqPort"]);        
 
-        factory = new ConnectionFactory() { HostName = connectionString, Port= Convert.ToInt16(configuration["rabbitmqPort"]) };
+        // Get the RabbitMQ connection information from the configuration
+        string connectionString = configuration["rabbitmqUrl"] ?? "localhost";
+        _logger.LogInformation("Connecter to rabbitmq: " + connectionString + ":" + configuration["rabbitmqPort"]);
+
+
+        // Create RabbitMQ connection factory and connection
+        factory = new ConnectionFactory() { HostName = connectionString, Port = Convert.ToInt16(configuration["rabbitmqPort"]) };
         connection = factory.CreateConnection();
         channel = connection.CreateModel();
 
-        //Logger en besked for at fortælle, hvad kører der er lavet.
+
+        // Create MongoDB database connection using configuration
         var client = new MongoClient($"{configuration["connectMongodb"]}");
         _database = client.GetDatabase(configuration["database"] ?? string.Empty);
         auctionBidCol = configuration["auctionBidCol"] ?? string.Empty;
     }
 
+  
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-       
-        // Deklarer et kønavn og få navnet fra RabbitMQ-serveren
-    var queueName = channel.QueueDeclare().QueueName;
- 
+        // Declare a queue for the channel
+        var queueName = channel.QueueDeclare().QueueName;
+
+        // Bind the queue to the topic exchange with routing key "auction"
         channel.QueueBind(queue: queueName,
                           exchange: "topic_logs",
                           routingKey: "auction");
-    // Opretter en forbruger, som lytter til beskeder på køen
-    var consumer = new EventingBasicConsumer(channel);
 
-    // Når forbrugeren modtager en besked, vil denne handling blive udført
-    consumer.Received += (model, ea) =>
-    {
-        // Konverterer beskedens krop fra bytes til en UTF-8-streng
-        var body = ea.Body.ToArray();
-        var message = Encoding.UTF8.GetString(body);
-        _logger.LogInformation(message);
-        // Gemmer routing key'en fra beskeden
-        var routingKey = ea.RoutingKey;
-        
-      var auctionCollection = _database.GetCollection<Bid>(auctionBidCol);
+        // Create a consumer for the channel
+        var consumer = new EventingBasicConsumer(channel);
 
-      Bid bid = JsonConvert.DeserializeObject<Bid>(message);
-      auctionCollection.InsertOne(bid);
-    
-    };
+        // Set up event handler for received messages
+        consumer.Received += (model, ea) =>
+        {
+            // Process the received message
+            var body = ea.Body.ToArray();
+            var message = Encoding.UTF8.GetString(body);
+            _logger.LogInformation(message);
+            var routingKey = ea.RoutingKey;
 
-    // Begynder at forbruge beskeder fra køen
-    channel.BasicConsume(queue: queueName,
-                         autoAck: true,
-                         consumer: consumer);       
+            // Get the auction collection from the MongoDB database
+            var auctionCollection = _database.GetCollection<Bid>(auctionBidCol);
 
-    // Kører en uendelig løkke, der logger en besked og venter 10 sekunder inden den kører igen
-    while (!stoppingToken.IsCancellationRequested)
-    {
-       
-        
-        _logger.LogInformation("Arbejder tid: {time}", DateTimeOffset.Now);
-        await Task.Delay(10000, stoppingToken);
-    }
+            // Deserialize the message into a Bid object and insert it into the auction collection
+            Bid bid = JsonConvert.DeserializeObject<Bid>(message);
+            auctionCollection.InsertOne(bid);
+        };
+
+        // Start consuming messages from the queue
+        channel.BasicConsume(queue: queueName,
+                             autoAck: true,
+                             consumer: consumer);
+
+        // Continuously perform work until cancellation is requested
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Working time: {time}", DateTimeOffset.Now);
+
+            // Delay the execution for 10 seconds
+            await Task.Delay(10000, stoppingToken);
+        }
     }
 }
