@@ -16,7 +16,7 @@ public class Worker : BackgroundService
     private IModel channel;
     private string auctionBidCol;
 
-  
+
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
         _logger = logger;
@@ -30,7 +30,8 @@ public class Worker : BackgroundService
 
 
             // Create RabbitMQ connection factory and connection
-            factory = new ConnectionFactory() { 
+            factory = new ConnectionFactory()
+            {
                 HostName = connectionString ?? "localhost",
                 Port = Convert.ToInt16(configuration["rabbitmqPort"] ?? "5672"),
                 UserName = configuration["rabbitmqUsername"] ?? "guest",
@@ -38,11 +39,16 @@ public class Worker : BackgroundService
 
             };
             connection = factory.CreateConnection();
-            channel = connection.CreateModel();     
+            channel = connection.CreateModel();
+            channel.QueueDeclare(queue: "auction",
+                    durable: false,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: null);
         }
         catch (System.Exception ex)
         {
-            _logger.LogError(ex,"FAILED: Connecter to rabbitmq going wrong: " + connectionString + ":" + configuration["rabbitmqPort"]);
+            _logger.LogError(ex, "FAILED: Connecter to rabbitmq going wrong: " + connectionString + ":" + configuration["rabbitmqPort"]);
             throw;
         }
 
@@ -56,26 +62,16 @@ public class Worker : BackgroundService
         }
         catch (System.Exception ex)
         {
-             _logger.LogError(ex,$"FAILED: Connecting to connectMongodb going wrong: {configuration["connectMongodb"]}");
+            _logger.LogError(ex, $"FAILED: Connecting to connectMongodb going wrong: {configuration["connectMongodb"]}");
             throw;
         }
     }
 
-  
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Declare a queue for the channel
-        var queueName = channel.QueueDeclare().QueueName;
-
-        // Bind the queue to the topic exchange with routing key "auction"
-        channel.QueueBind(queue: queueName,
-                          exchange: "topic_logs",
-                          routingKey: "auction");
-
         // Create a consumer for the channel
         var consumer = new EventingBasicConsumer(channel);
-
-        // Set up event handler for received messages
         consumer.Received += (model, ea) =>
         {
             // Process the received message
@@ -91,9 +87,7 @@ public class Worker : BackgroundService
             Bid bid = JsonConvert.DeserializeObject<Bid>(message);
             auctionCollection.InsertOne(bid);
         };
-
-        // Start consuming messages from the queue
-        channel.BasicConsume(queue: queueName,
+        channel.BasicConsume(queue: "auction",
                              autoAck: true,
                              consumer: consumer);
 
